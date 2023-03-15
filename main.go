@@ -9,12 +9,11 @@ import (
 func main() {
 
 	log.Println("init event store")
-	
-	es, err := store.NewStore("dbtest.db")
+
+	_, err := store.NewStore(store.WithBBoltRepository())
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-
-	es.Close()
 }
