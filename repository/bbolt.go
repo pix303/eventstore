@@ -21,11 +21,12 @@ type BBoltRepository struct {
 func NewBBoltRepository(dbPath string) (*BBoltRepository, error) {
 	db, err := bbolt.Open(dbPath, 0666, nil)
 
-	bbr := BBoltRepository{
-		db,
-	}
 	if err != nil {
 		return nil, err
+	}
+	
+	bbr := BBoltRepository{
+		db,
 	}
 
 	db.Update(func(tx *bbolt.Tx) error {
@@ -72,9 +73,9 @@ func (bbr *BBoltRepository) Add(event event.StoreEvent) error {
 }
 
 // Get returns a single event by key
-func (bbr *BBoltRepository) Get(key string) event.StoreEvent {
+func (bbr *BBoltRepository) Get(key string) (event.StoreEvent, error) {
 	var e event.StoreEvent
-	_ = bbr.db.View(func(tx *bbolt.Tx) error {
+	err := bbr.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(BUCKET_NAME))
 		value := bucket.Get([]byte(key))
 		err := json.Unmarshal(value, &e)
@@ -83,16 +84,18 @@ func (bbr *BBoltRepository) Get(key string) event.StoreEvent {
 		}
 		return nil
 	})
-
-	return e
+if err != nil{
+	return e, err
+}
+	return e, nil
 }
 
 // GetByPrefix returns an event group by partial key (typically and aggregate + ID)
-func (bbr *BBoltRepository) GetByPrefix(prefix string) []event.StoreEvent {
+func (bbr *BBoltRepository) GetByPrefix(prefix string) ([]event.StoreEvent, error) {
 
 	var events []event.StoreEvent = make([]event.StoreEvent, 0)
 
-	_ = bbr.db.View(func(tx *bbolt.Tx) error {
+	err := bbr.db.View(func(tx *bbolt.Tx) error {
 		cursor := tx.Bucket([]byte(BUCKET_NAME)).Cursor()
 		prefixInput := []byte(prefix)
 
@@ -108,5 +111,8 @@ func (bbr *BBoltRepository) GetByPrefix(prefix string) []event.StoreEvent {
 		return nil
 	})
 
-	return events
+	if err != nil{
+		return nil, err
+	}
+	return events, nil
 }
