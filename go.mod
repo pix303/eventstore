@@ -1,6 +1,6 @@
 module github.com/pix303/eventstore
 
-go 1.19
+go 1.20
 
 require go.etcd.io/bbolt v1.3.7
 
