@@ -2,8 +2,8 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/pix303/eventstore/event"
@@ -47,15 +47,23 @@ func WithBBoltRepository() EventStoreConfiguration {
 	return withRepository(repo)
 }
 
+func WithPostgresRepository() EventStoreConfiguration {
+	repo, err := repository.NewPgsqlRepository(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return withRepository(repo)
+}
+
 func (es *EventStore) Close() {
 	es.repo.Close()
 }
 
-func (es *EventStore) Add( eventType string, aggregate string, id string, payload any ) error {
+func (es *EventStore) Add(eventType string, aggregate string, id string, payload string) error {
 	e := event.StoreEvent{
 		Type:          eventType,
 		Payload:       payload,
-		CreatedAt:    time.Now().Format("20060102_150405.00000"),
+		CreatedAt:     time.Now().Format("20060102_150405.00000"),
 		AggregateName: aggregate,
 		AggregateID:   id,
 	}
@@ -67,7 +75,10 @@ func (es *EventStore) Add( eventType string, aggregate string, id string, payloa
 	return nil
 }
 
-func (es *EventStore) GetAggregate(aggregate string, id string ) ([]event.StoreEvent, error) {
-	return es.repo.GetByPrefix(fmt.Sprintf("%s-%s",aggregate,id))
-} 
+func (es *EventStore) GetAggregate(aggregateName string, id string) ([]event.StoreEvent, error) {
+	return es.repo.GetAggregateEvents(aggregateName, id)
+}
 
+func (es *EventStore) GetAggregates(aggregateName string) ([]event.StoreEvent, error) {
+	return es.repo.GetAllAggregates(aggregateName)
+}

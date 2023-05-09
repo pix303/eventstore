@@ -24,7 +24,7 @@ func NewBBoltRepository(dbPath string) (*BBoltRepository, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	bbr := BBoltRepository{
 		db,
 	}
@@ -41,7 +41,7 @@ func NewBBoltRepository(dbPath string) (*BBoltRepository, error) {
 }
 
 // BuildKey return a key for a StoreEvent
-func (bbr *BBoltRepository) BuildKey(event event.StoreEvent) string {
+func buildKey(event event.StoreEvent) string {
 	return fmt.Sprintf("%s-%s-%s", event.AggregateName, event.AggregateID, event.CreatedAt)
 }
 
@@ -55,7 +55,7 @@ func (bbr *BBoltRepository) Add(event event.StoreEvent) error {
 	err := bbr.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(BUCKET_NAME))
 
-		key := bbr.BuildKey(event)
+		key := buildKey(event)
 		value, err := json.Marshal(event)
 		if err != nil {
 			return fmt.Errorf("error on convert in json event: %s", err.Error())
@@ -72,32 +72,25 @@ func (bbr *BBoltRepository) Add(event event.StoreEvent) error {
 	return err
 }
 
-// Get returns a single event by key
-func (bbr *BBoltRepository) Get(key string) (event.StoreEvent, error) {
-	var e event.StoreEvent
-	err := bbr.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket([]byte(BUCKET_NAME))
-		value := bucket.Get([]byte(key))
-		err := json.Unmarshal(value, &e)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-if err != nil{
-	return e, err
+func (bbr *BBoltRepository) GetAggregateEvents(name string, id string) ([]event.StoreEvent, error) {
+	return getByPrefix(bbr.db, name, &id)
 }
-	return e, nil
+
+func (bbr *BBoltRepository) GetAllAggregates(name string) ([]event.StoreEvent, error) {
+	return getByPrefix(bbr.db, name, nil)
 }
 
 // GetByPrefix returns an event group by partial key (typically and aggregate + ID)
-func (bbr *BBoltRepository) GetByPrefix(prefix string) ([]event.StoreEvent, error) {
+func getByPrefix(db *bbolt.DB, aggregate string, id *string) ([]event.StoreEvent, error) {
 
 	var events []event.StoreEvent = make([]event.StoreEvent, 0)
 
-	err := bbr.db.View(func(tx *bbolt.Tx) error {
+	err := db.View(func(tx *bbolt.Tx) error {
 		cursor := tx.Bucket([]byte(BUCKET_NAME)).Cursor()
-		prefixInput := []byte(prefix)
+		prefixInput := []byte(aggregate)
+		if id != nil {
+			prefixInput = []byte(fmt.Sprintf("%s-%s", aggregate, *id))
+		}
 
 		for k, v := cursor.Seek(prefixInput); k != nil && bytes.HasPrefix(k, prefixInput); k, v = cursor.Next() {
 			var e event.StoreEvent
@@ -111,7 +104,7 @@ func (bbr *BBoltRepository) GetByPrefix(prefix string) ([]event.StoreEvent, erro
 		return nil
 	})
 
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	return events, nil
