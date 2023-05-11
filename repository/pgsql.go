@@ -11,14 +11,14 @@ import (
 	"github.com/pix303/localemgmtES-commons/model"
 )
 
-// PgsqlRepository rappresents a db client for postgresql
+// PgsqlRepository wraps a postgresql db client
 type PgsqlRepository struct {
 	db *pgx.Conn
 }
 
 // NewPgsqlRepository create a new pgsql db client
-func NewPgsqlRepository(dbUrl string) (*PgsqlRepository, error) {
-	conn, err := pgx.Connect(context.Background(), dbUrl)
+func NewPgsqlRepository(dbURL string) (*PgsqlRepository, error) {
+	conn, err := pgx.Connect(context.Background(), dbURL)
 	if err != nil {
 		return nil, err
 	}
@@ -33,10 +33,13 @@ func NewPgsqlRepository(dbUrl string) (*PgsqlRepository, error) {
 	CREATE TABLE IF NOT EXISTS eventstore (
     event_id serial NOT NULL PRIMARY KEY,
     event_type varchar(128),
-    aggregate_id UUID,
+    aggregate_id varchar(128),
     aggregate_name varchar(1024),
     created_at timestamp DEFAULT clock_timestamp(),
-    payload json)
+    payload text,
+	metadata text,
+	user_id varchar(128), 
+	)
 	`)
 
 	if err != nil {
@@ -54,6 +57,7 @@ func NewPgsqlRepository(dbUrl string) (*PgsqlRepository, error) {
 	return &db, nil
 }
 
+// Add implements repository interface for adding an event in store
 func (pgr *PgsqlRepository) Add(event event.StoreEvent) error {
 	tx, err := pgr.db.Begin(context.Background())
 	if err != nil {
@@ -84,10 +88,12 @@ func (pgr *PgsqlRepository) Add(event event.StoreEvent) error {
 	return nil
 }
 
+// GetAggregateEvents return all events about an aggregate
 func (pgr *PgsqlRepository) GetAggregateEvents(name string, id string) ([]event.StoreEvent, error) {
 	return getAggregate(pgr.db, name, &id)
 }
 
+// GetAllAggregates return all events about an aggregate type
 func (pgr *PgsqlRepository) GetAllAggregates(name string) ([]event.StoreEvent, error) {
 	return getAggregate(pgr.db, name, nil)
 }
@@ -99,24 +105,26 @@ func getAggregate(db *pgx.Conn, name string, id *string) ([]event.StoreEvent, er
 	var typez string
 	var aggID string
 	var aggName string
-	var payloadData string
+	var payloadValue string
+	var metadataValue string
+	var userID string
 	var createdAt pgtype.Timestamp
 
 	var rows pgx.Rows
 	var err error
 
-	baseSqlStatement := "SELECT event_type, aggregate_id, aggregate_name, payload, created_at FROM eventstore WHERE aggregate_id = $1"
+	baseSQLStatement := "SELECT event_type, aggregate_id, aggregate_name, payload, metadata, user_id, created_at FROM eventstore WHERE aggregate_id = $1"
 
 	if id != nil {
 		rows, err = db.Query(
 			context.Background(),
-			fmt.Sprintf("%s AND aggregate_name = $2", baseSqlStatement),
+			fmt.Sprintf("%s AND aggregate_name = $2", baseSQLStatement),
 			*id, name,
 		)
 	} else if id == nil {
 		rows, err = db.Query(
 			context.Background(),
-			baseSqlStatement,
+			baseSQLStatement,
 			name,
 		)
 	}
@@ -132,12 +140,21 @@ func getAggregate(db *pgx.Conn, name string, id *string) ([]event.StoreEvent, er
 			&typez,
 			&aggID,
 			&aggName,
-			&payloadData,
+			&payloadValue,
+			&metadataValue,
+			&userID,
 			&createdAt,
 		)
-		var event = event.StoreEvent{Type: typez, AggregateName: aggName, AggregateID: aggID, Payload: payloadData, CreatedAt: createdAt.Time.Format(model.DateTimeFormat)}
+		var event = event.StoreEvent{
+			Type:          typez,
+			AggregateName: aggName,
+			AggregateID:   aggID,
+			Payload:       payloadValue,
+			Metadata:      metadataValue,
+			UserID:        userID,
+			CreatedAt:     createdAt.Time.Format(model.DateTimeFormat),
+		}
 		events = append(events, event)
-
 	}
 
 	if err = rows.Err(); err != nil {
@@ -147,6 +164,7 @@ func getAggregate(db *pgx.Conn, name string, id *string) ([]event.StoreEvent, er
 	return events, nil
 }
 
+// Close permits close db connection
 func (pgr PgsqlRepository) Close() error {
 	return pgr.db.Close(context.Background())
 }

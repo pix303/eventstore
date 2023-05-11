@@ -40,11 +40,6 @@ func NewBBoltRepository(dbPath string) (*BBoltRepository, error) {
 	return &bbr, nil
 }
 
-// BuildKey return a key for a StoreEvent
-func buildKey(event event.StoreEvent) string {
-	return fmt.Sprintf("%s-%s-%s", event.AggregateName, event.AggregateID, event.CreatedAt)
-}
-
 // Close closes db
 func (bbr *BBoltRepository) Close() error {
 	return bbr.db.Close()
@@ -55,7 +50,7 @@ func (bbr *BBoltRepository) Add(event event.StoreEvent) error {
 	err := bbr.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(BUCKET_NAME))
 
-		key := buildKey(event)
+		key := fmt.Sprintf("%s-%s-%s", event.AggregateName, event.AggregateID, event.CreatedAt)
 		value, err := json.Marshal(event)
 		if err != nil {
 			return fmt.Errorf("error on convert in json event: %s", err.Error())
